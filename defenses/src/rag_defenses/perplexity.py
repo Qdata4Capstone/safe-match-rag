@@ -63,7 +63,7 @@ class PerplexityDetector(BaseDetector):
 
 
 class PerplexityScorer:
-    def __init__(self, model_name: str = "gpt2", device: str = "cuda"):
+    def __init__(self, model_name: str = "gpt2", device: str = "cpu"):
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name).to(device)

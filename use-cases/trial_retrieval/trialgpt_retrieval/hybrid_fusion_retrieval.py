@@ -4,17 +4,34 @@ __author__ = "qiao"
 Conduct the first stage retrieval by the hybrid retriever 
 """
 
+import os
+import sys
+
+if sys.platform == "darwin":
+	# torch and faiss each bundle their own private libomp.dylib; loading both
+	# in one process crashes with SIGSEGV inside libomp's thread pool on macOS.
+	# Must be set before torch/faiss are imported anywhere in the process.
+	os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+	os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 from beir.datasets.data_loader import GenericDataLoader
 import faiss
 import json
 from nltk import word_tokenize
 import numpy as np
-import os
 from rank_bm25 import BM25Okapi
-import sys
 import tqdm
 import torch
 from transformers import AutoTokenizer, AutoModel
+
+
+def get_device():
+	if torch.cuda.is_available():
+		return "cuda"
+	if torch.backends.mps.is_available():
+		return "mps"
+	return "cpu"
+
 
 def get_bm25_corpus_index(corpus):
 	corpus_path = os.path.join(f"trialgpt_retrieval/bm25_corpus_{corpus}.json")
@@ -68,7 +85,8 @@ def get_medcpt_corpus_index(corpus):
 		embeds = []
 		corpus_nctids = []
 
-		model = AutoModel.from_pretrained("ncbi/MedCPT-Article-Encoder").to("cuda")
+		device = get_device()
+		model = AutoModel.from_pretrained("ncbi/MedCPT-Article-Encoder").to(device)
 		tokenizer = AutoTokenizer.from_pretrained("ncbi/MedCPT-Article-Encoder")
 
 		with open(f"dataset/{corpus}/corpus.jsonl", "r") as f:
@@ -86,10 +104,10 @@ def get_medcpt_corpus_index(corpus):
 						[[title, text]], 
 						truncation=True, 
 						padding=True, 
-						return_tensors='pt', 
+						return_tensors='pt',
 						max_length=512,
-					).to("cuda")
-					
+					).to(device)
+
 					embed = model(**encoded).last_hidden_state[:, 0, :]
 
 					embeds.append(embed[0].cpu().numpy())
@@ -136,7 +154,8 @@ if __name__ == "__main__":
 	medcpt, medcpt_nctids = get_medcpt_corpus_index(corpus)
 
 	# loading the query encoder for MedCPT
-	model = AutoModel.from_pretrained("ncbi/MedCPT-Query-Encoder").to("cuda")
+	device = get_device()
+	model = AutoModel.from_pretrained("ncbi/MedCPT-Query-Encoder").to(device)
 	tokenizer = AutoTokenizer.from_pretrained("ncbi/MedCPT-Query-Encoder")
 	
 	# then conduct the searches, saving top 1k
@@ -181,9 +200,9 @@ if __name__ == "__main__":
 						conditions, 
 						truncation=True, 
 						padding=True, 
-						return_tensors='pt', 
+						return_tensors='pt',
 						max_length=256,
-					).to("cuda")
+					).to(device)
 
 					# encode the queries (use the [CLS] last hidden states as the representations)
 					embeds = model(**encoded).last_hidden_state[:, 0, :].cpu().numpy()

@@ -1,4 +1,14 @@
 import json
+import os
+import sys
+
+if sys.platform == "darwin":
+  # torch and faiss/sklearn each bundle their own private libomp.dylib; loading
+  # multiple copies in one process can crash with SIGSEGV inside libomp's
+  # thread pool on macOS. Must be set before torch is imported anywhere.
+  os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+  os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import gym
 import requests
 from bs4 import BeautifulSoup
@@ -20,6 +30,15 @@ from ReAct.defense_baselines import (
     l2_distance_scores,
     l2_norm_scores,
 )
+
+
+def get_device():
+  if torch.cuda.is_available():
+    return "cuda"
+  if torch.backends.mps.is_available():
+    return "mps"
+  return "cpu"
+
 
 def get_ada_embedding(text, model="text-embedding-3-small"):
   text = text.replace("\n", " ")
@@ -57,6 +76,7 @@ class WikiEnv(gym.Env):
       Initialize the environment.
     """
     super().__init__()
+    self.device = get_device()
     self.page = None  # current Wikipedia page
     self.obs = None  # current observation
     self.lookup_keyword = None  # current lookup keyword
@@ -97,16 +117,16 @@ class WikiEnv(gym.Env):
     # load retriever
     if "dpr" in embedder_name:
       self.embedding_tokenizer = AutoTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
-      self.embedding_model = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base").to("cuda")
+      self.embedding_model = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base").to(self.device)
     elif "realm" in embedder_name and "orqa" not in embedder_name:
       self.embedding_tokenizer = AutoTokenizer.from_pretrained("google/realm-cc-news-pretrained-embedder")
-      self.embedding_model = RealmEmbedder.from_pretrained("google/realm-cc-news-pretrained-embedder").realm.to("cuda")
+      self.embedding_model = RealmEmbedder.from_pretrained("google/realm-cc-news-pretrained-embedder").realm.to(self.device)
     elif "ance" in embedder_name:
       self.embedding_tokenizer = AutoTokenizer.from_pretrained("castorini/ance-dpr-question-multi")
-      self.embedding_model = DPRContextEncoder.from_pretrained("castorini/ance-dpr-question-multi").to("cuda")
+      self.embedding_model = DPRContextEncoder.from_pretrained("castorini/ance-dpr-question-multi").to(self.device)
     elif "bge" in embedder_name:
       self.embedding_tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-large-en")
-      self.embedding_model = DPRContextEncoder.from_pretrained("BAAI/bge-large-en").to("cuda")
+      self.embedding_model = DPRContextEncoder.from_pretrained("BAAI/bge-large-en").to(self.device)
     elif "ada" in embedder_name:
       self.embedding_model = "openai/ada"
 
@@ -156,8 +176,8 @@ class WikiEnv(gym.Env):
 
         else:
             tokenized_input = self.embedding_tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
-            input_ids = tokenized_input["input_ids"].to("cuda")
-            attention_mask = tokenized_input["attention_mask"].to("cuda")
+            input_ids = tokenized_input["input_ids"].to(self.device)
+            attention_mask = tokenized_input["attention_mask"].to(self.device)
 
             with torch.no_grad():
                 query_embedding = self.embedding_model(input_ids, attention_mask).pooler_output
@@ -169,7 +189,7 @@ class WikiEnv(gym.Env):
       with open(f"ReAct/database/embeddings/strategyqa_database_embeddings_{embedder_name}.pkl", "wb") as f:
         pickle.dump(self.db_embeddings, f)
 
-    self.db_embeddings = torch.tensor(self.db_embeddings, dtype=torch.float32).to("cuda")
+    self.db_embeddings = torch.tensor(self.db_embeddings, dtype=torch.float32).to(self.device)
     if self.embedding_model != "openai/ada":
       self.db_embeddings = self.db_embeddings.squeeze(1)
 
@@ -298,19 +318,19 @@ class WikiEnv(gym.Env):
           except:
             pass
           
-          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to("cuda")
+          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to(self.device)
           query_embedding = query_embedding.unsqueeze(0)
       else:
           tokenized_input = self.embedding_tokenizer(entity, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
-          input_ids = tokenized_input["input_ids"].to("cuda")
-          attention_mask = tokenized_input["attention_mask"].to("cuda")
+          input_ids = tokenized_input["input_ids"].to(self.device)
+          attention_mask = tokenized_input["attention_mask"].to(self.device)
 
           with torch.no_grad():
               query_embedding = self.embedding_model(input_ids, attention_mask).pooler_output
 
           query_embedding = query_embedding.detach().cpu().numpy().tolist()  
 
-          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to("cuda")
+          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to(self.device)
 
       # print("query_embedding", query_embedding.shape)
       # print("db_embeddings", self.db_embeddings.shape)
@@ -366,12 +386,12 @@ class WikiEnv(gym.Env):
   def _embed_text(self, text):
       if self.embedding_model == "openai/ada":
           query_embedding = get_ada_embedding(text)
-          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to("cuda")
+          query_embedding = torch.tensor(query_embedding, dtype=torch.float32).to(self.device)
           return query_embedding.unsqueeze(0)
 
       tokenized_input = self.embedding_tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
-      input_ids = tokenized_input["input_ids"].to("cuda")
-      attention_mask = tokenized_input["attention_mask"].to("cuda")
+      input_ids = tokenized_input["input_ids"].to(self.device)
+      attention_mask = tokenized_input["attention_mask"].to(self.device)
 
       with torch.no_grad():
           query_embedding = self.embedding_model(input_ids, attention_mask).pooler_output
@@ -417,7 +437,7 @@ class WikiEnv(gym.Env):
       self.baseline_false_positive_rates["l2_norm"] = self.baseline_stats["l2_norm"].false_positive_rate
       self.baseline_false_positive_rates["l2_distance"] = self.baseline_stats["l2_distance"].false_positive_rate
 
-      self.perplexity_scorer = PerplexityScorer(device="cuda")
+      self.perplexity_scorer = PerplexityScorer(device=self.device)
       clean_ppl_scores = self.perplexity_scorer.score_texts(self.clean_reference_texts).cpu()
       self.baseline_stats["perplexity"] = fit_two_sided_quantile(clean_ppl_scores, self.drs_quantile)
       self.baseline_false_positive_rates["perplexity"] = self.baseline_stats["perplexity"].false_positive_rate
