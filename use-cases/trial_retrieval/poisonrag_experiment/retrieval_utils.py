@@ -57,7 +57,11 @@ class MedCPTCorpusIndex:
 
 
 def get_device():
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 def build_medcpt_corpus_index(
