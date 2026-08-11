@@ -178,22 +178,32 @@ demo_strategyqa_agent() {
   echo "    --drs_num_directions 200 --drs_quantile 0.99 --drs_top_k 1 \\"
   echo "    --poison_injection_num 229"
   echo
-  echo "Illustrative table format (not real run output -- see the README's note):"
+  echo "Real output (from a smaller/faster verification run, not the command"
+  echo "shown above -- see the README's note for the exact command used and"
+  echo "why this isn't a citable detection rate):"
   cat <<'SAMPLE'
 Method       Detection rate   Clean FPR
 ---------------------------------------
-DRS          0.9170           0.0123
-L2-norm      0.1747           0.0100
-L2-distance  0.3712           0.0080
-Perplexity   0.6550           0.0210
+DRS          1.0000           0.0100
+L2-norm      0.0000           0.0009
+L2-distance  0.0000           0.0100
+Perplexity   0.0000           0.0096
 SAMPLE
   echo
-  echo "(--drs_num_directions 200 above doesn't match the paper's M=100 --"
-  echo "see the README's Notes section. Total reference-set size here is"
-  echo "roughly len(test set) * --drs_top_k, deduplicated -- --drs_top_k is"
-  echo "the lever to raise first if detection looks weak, before raising"
-  echo "--drs_num_directions. See drs_defense/README.md's hyperparameter"
-  echo "guidance for why M and reference-set size need to scale together.)"
+  echo "(Real output from --drs_num_directions 50 --poison_injection_num 5 --"
+  echo "the smallest config that still exercises the full pipeline end to"
+  echo "end -- not the --drs_num_directions 200 --poison_injection_num 229"
+  echo "command shown above. DRS caught 5/5 injected poison docs; every"
+  echo "baseline caught 0/5. 5 poison docs is too small a sample to treat as"
+  echo "a statistically meaningful detection rate -- a real run at"
+  echo "--poison_injection_num 229 would be needed for a citable number."
+  echo "--drs_num_directions 200 above also doesn't match the paper's"
+  echo "M=100 -- see the README's Notes section. Total reference-set size"
+  echo "here is roughly len(test set) * --drs_top_k, deduplicated --"
+  echo "--drs_top_k is the lever to raise first if detection looks weak,"
+  echo "before raising --drs_num_directions. See drs_defense/README.md's"
+  echo "hyperparameter guidance for why M and reference-set size need to"
+  echo "scale together.)"
 }
 
 if [ "$TARGET" = "trial_retrieval" ] || [ "$TARGET" = "medqa_rag" ] || [ "$TARGET" = "all" ]; then

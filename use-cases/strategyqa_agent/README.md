@@ -81,6 +81,19 @@ Perplexity   0.6550           0.0210
 
 (Detection rate is the fraction of injected poison documents each defense flagged; Clean FPR is the fraction of the clean reference set each defense's own threshold would have flagged — both computed on the same clean reference set and quantile, so the four rows are directly comparable. This is illustrative formatting output, not published numbers — actual rates depend on the corpus, trigger, and poison count for a given run.)
 
+**Real output, verified end-to-end** (`--drs_num_directions 50 --poison_injection_num 5` — the smallest config that still exercises the full pipeline, not the `--drs_num_directions 200 --poison_injection_num 229` command above; `--drs_quantile 0.99 --drs_top_k 1` unchanged, clean reference set of 2290 retrieved docs):
+
+```
+Method       Detection rate   Clean FPR
+---------------------------------------
+DRS          1.0000           0.0100
+L2-norm      0.0000           0.0009
+L2-distance  0.0000           0.0100
+Perplexity   0.0000           0.0096
+```
+
+DRS caught 5/5 injected poison docs; every baseline caught 0/5. Don't treat this as a statistically meaningful detection rate — 5 poison docs is too small a sample, and this was the first time this script had ever been run end-to-end (it had three independent bugs blocking any run at all, all now fixed — see git history). A real run at `--poison_injection_num 229` would be needed for a citable number.
+
 ## Notes
 
 - `--drs_num_directions 200` — note: every M value stated in the DRS paper's main text (Tables 2-5, Section 5.1.1) is `100`, not `200`; this default doesn't match what's visible in the paper (its appendix, not included in the copy checked, might contain a `200` ablation, but that's unverified — see `docs/drs-dual-pca-analysis.md`). If you're tuning this for your own run, try `--drs_num_directions 100` first to match the paper, and see [`drs_defense/README.md`](../../drs_defense/README.md#choosing-m-num_directions-and-reference-set-size-n) for how `M` and reference-set size need to scale together (a real sweep on `medqa_rag` found a too-small reference set makes a *larger* `M` perform worse, not better).
@@ -89,10 +102,12 @@ Perplexity   0.6550           0.0210
   [`drs_defense/README.md`](../../drs_defense/README.md#caveats-on-n-and-m-what-these-numbers-dont-tell-you)'s
   caveats section: the `n`/`M` values that worked well elsewhere in this
   repo are specific to their own embedding model, corpus, and poison count
-  (this use case's own illustrative table above, at `--drs_num_directions
-  200`, is a different setup entirely — not evidence for or against
-  `M=100` here), and small poison-document counts make detection-rate
-  differences of a few points hard to distinguish from noise.
+  (this use case's own tables above — the illustrative one at
+  `--drs_num_directions 200`, and the real but reduced-scale one at
+  `--drs_num_directions 50` — are each their own setup entirely, not
+  evidence for or against `M=100` here), and small poison-document counts
+  make detection-rate differences of a few points hard to distinguish from
+  noise.
 - `--drs_quantile 0.99` sets the filtering threshold to the 99th percentile of clean scores.
 - The currently supported retriever option in this codepath is `dpr`.
 - The currently supported LLM backend in this codepath is `qwen` via Ollama.

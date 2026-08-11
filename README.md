@@ -18,7 +18,7 @@ This repo showcases retrieval-augmented generation (RAG) data-poisoning **attack
 ./demo.sh --dry-run        # print the commands + sample output without running anything
 ```
 
-Needs Ollama running with `qwen2.5:7b-instruct` pulled (see [Installation guide](#installation-guide)). `trial_retrieval` and `medqa_rag` run for real (a few minutes each — `trial_retrieval` encodes the SIGIR corpus with MedCPT, `medqa_rag` uses a small demo-scale config so it stays fast); `strategyqa_agent` needs its own conda env (see its README) so the script only prints the command and a sample table for it. Every mode prints the sample outcome first so you can see what to expect either way.
+Needs Ollama running with `qwen2.5:7b-instruct` pulled (see [Installation guide](#installation-guide)). `trial_retrieval` and `medqa_rag` run for real (a few minutes each — `trial_retrieval` encodes the SIGIR corpus with MedCPT, `medqa_rag` uses a small demo-scale config so it stays fast); `strategyqa_agent` needs its own conda env (see its README) so the script only prints the command and a real (but reduced-scale) sample table for it, from an actual verified run — its README also has an illustrative table at the full documented scale. Every mode prints the sample outcome first so you can see what to expect either way.
 
 ## Repository layout
 
@@ -130,6 +130,17 @@ Baseline poisoning-defense detectors, evaluated alongside DRS in every use case'
 | `rag_defenses.perplexity.PerplexityDetector` / `PerplexityScorer` | `class(model_name, device="cpu", ...)` | Causal-LM perplexity, two independent implementations (not proven interchangeable) |
 | `rag_defenses.defense_baselines.fit_upper_quantile` / `fit_two_sided_quantile` | `(clean_scores, quantile=0.99) -> QuantileStats` / `-> PerplexityStats` | Generic one-sided / two-sided threshold fitting |
 
+#### DRS vs. the baselines: what each method actually measures
+
+| Method | Signal | Threshold | Core assumption |
+| --- | --- | --- | --- |
+| **DRS** | Projection onto the clean reference set's *low-variance* eigen-directions, scaled by `1/√λ` | One-sided (upper quantile of clean scores) | Poison perturbs directions the clean corpus barely varies in, where legitimate embeddings sit near-zero by construction — even a small push off that manifold registers as a large deviation |
+| L2-norm | Raw embedding vector norm | Two-sided | Poisoned/optimized embeddings have anomalous magnitude vs. natural text |
+| L2-distance | Distance to a clean centroid, or nearest-neighbor distance among clean references | One-sided | Poison sits farther from the "typical" clean embedding neighborhood |
+| Perplexity | Causal-LM perplexity of the raw text | Two-sided | Poison text (LLM-generated or adversarially optimized) reads as unnaturally fluent or unnaturally garbled |
+
+The baselines all look for an anomaly in directions/spaces the clean corpus has *high* variance in (or in the raw text, for perplexity) — a small, targeted adversarial perturbation can hide inside that natural spread. DRS instead looks at the directions the clean corpus varies *least* in, where an attack optimized to look normal everywhere else is most likely to still leave a signature — which is why, across this repo's own runs (see each use case's README), DRS consistently catches more real poisoned documents at a comparable clean false-positive rate.
+
 ## Use cases
 
 - [`use-cases/trial_retrieval/`](use-cases/trial_retrieval/README.md) — TrialGPT-style clinical trial retrieval: keyword generation plus hybrid BM25/MedCPT fusion retrieval over the SIGIR and TREC Clinical Trials corpora, and a corpus-poisoning attack/defense experiment ([`poisonrag_experiment/`](use-cases/trial_retrieval/poisonrag_experiment/README.md)).
@@ -229,3 +240,7 @@ If you use the DRS defense from this repo in your own work, please cite the pape
   url          = {https://openreview.net/forum?id=2aL6gcFX7q},
 }
 ```
+
+## Reproduction status
+
+This repo is a **partial reimplementation** of the DRS paper (Xian et al., 2025), not a full reproduction of its published results. `drs_defense/` implements the paper's Algorithm 1, Eq. 3, and Algorithm 2 directly against the paper's formulas, verified by `drs_defense/tests/` — but the attacks, datasets, and hyperparameters exercised across the three use cases here are independently built for this repo, not the paper's exact experimental setup. No number shown anywhere in this repo (including the sample outputs above) should be read as validating or reproducing the paper's own published results.
