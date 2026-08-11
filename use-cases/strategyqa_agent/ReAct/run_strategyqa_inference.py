@@ -1,6 +1,16 @@
+import os
 import re
+import sys
 import time
 import json
+
+# Running this file directly (`python ReAct/run_strategyqa_inference.py`) puts
+# only this file's own directory (ReAct/) on sys.path, so bare `import
+# local_wikienv` resolves but local_wikienv's own `from ReAct.drs import ...`
+# does not, since the parent directory isn't on sys.path too. Add it here
+# instead of requiring callers to set PYTHONPATH manually.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import local_wikienv, wrappers
 from tqdm import tqdm
 import requests
@@ -53,6 +63,7 @@ def qwen(prompt, stop=["\n"], return_probs=False, system_prompt=None):
 if args.backbone != "qwen":
     raise ValueError(f"Unsupported backbone: {args.backbone}. Only 'qwen' is supported.")
 
+os.makedirs("ReAct/outputs", exist_ok=True)
 save_file_name = f"ReAct/outputs/qwen25-strategyqa-dev-react-{embedder}-{algo}-{task_type}.jsonl"
 llm = qwen
 

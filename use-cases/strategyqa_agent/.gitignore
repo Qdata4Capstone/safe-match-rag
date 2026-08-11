@@ -4,6 +4,7 @@ dataset/
 model_checkpoints/
 slurm/
 ReAct/database/embeddings/
+ReAct/outputs/
 wandb/
 logs/
 plot/

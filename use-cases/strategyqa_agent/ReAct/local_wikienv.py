@@ -154,6 +154,7 @@ class WikiEnv(gym.Env):
     
     print("Local WikiEnv initialized: ", len(self.database))
 
+    os.makedirs("ReAct/database/embeddings", exist_ok=True)
 
     if Path(f"ReAct/database/embeddings/strategyqa_database_embeddings_{embedder_name}.pkl").exists():
       with open(f"ReAct/database/embeddings/strategyqa_database_embeddings_{embedder_name}.pkl", "rb") as f:

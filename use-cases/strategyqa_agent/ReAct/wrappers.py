@@ -30,7 +30,10 @@ class StrategyQAWrapper(gym.Wrapper):
     super().__init__(env)
     data_file = f"{DATA_DIR}/{STRATEGYQA_SPLIT_FILE[split]}"
     self.data = json.load(open(data_file))
-    self.data = [(d['question'], d['answer']) for d in self.data]
+    # the "dev" split is StrategyQA's real held-out test set and ships with no
+    # gold answer; leave it as None so accuracy/em on that split reads as 0
+    # instead of crashing, while the labeled "train" split is unaffected.
+    self.data = [(d['question'], d.get('answer')) for d in self.data]
     self.data_idx = 0
     self.split = split
 
