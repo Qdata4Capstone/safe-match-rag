@@ -1,0 +1,12 @@
+.worktrees/
+.superpowers/
+*.egg-info
+*.cpython-313.pyc
+*.pytest_cache/
+*.pyc
+__pycache__/
+*/.DS_Store
+.DS_Store
+*/*/.DS_Store
+*/*.egg-info/
+*/*/*.egg-info/*
