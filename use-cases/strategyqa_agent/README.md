@@ -112,3 +112,14 @@ DRS caught 5/5 injected poison docs; every baseline caught 0/5. Don't treat this
 - The currently supported retriever option in this codepath is `dpr`.
 - The currently supported LLM backend in this codepath is `qwen` via Ollama.
 - `--algo`/`-a` picks the trigger source for the attack described above (`badchain` or `ap`); `--mode` (default `react`) and `--oracle` (default `True`) also exist as CLI flags, but the `dpr` + `qwen` codepath exercised by `--enable_drs`/`--compare_defenses` above is the one this defense evaluation targets.
+
+## How search happens in this agent
+
+`ReAct/search.py` (SerpAPI/real Google search) is legacy code left over from the original ReAct/AgentPoison design — it is not imported or used anywhere in `run_strategyqa_inference.py`. All search in this use case is local nearest-neighbor retrieval, not a live web call:
+
+1. **The LLM emits an action.** The Ollama-backed model (`qwen2.5:7b-instruct`), prompted with the ReAct instructions (`Search[entity]`, `Lookup[keyword]`, `Finish[answer]`), generates an action such as `Search[some entity]`.
+2. **`step()` in `run_strategyqa_inference.py`** (lines ~101-112) intercepts any `search[` action and rewrites it to `search[{current_context}]` — it discards whatever entity string the model produced and instead searches using the running question/thought context — before calling `env.step(action)`.
+3. **`StrategyQAWrapper.step`** (`wrappers.py`) forwards the action to the underlying `WikiEnv.step` (`local_wikienv.py`), which parses `search[...]` and calls `self.local_retrieve_step(entity)`.
+4. **`local_retrieve_step`** (`local_wikienv.py`) does the actual retrieval: it encodes the query with the DPR context encoder, computes cosine similarity against `self.db_embeddings` (the precomputed embeddings of every paragraph in the local `strategyqa_train_paragraphs.json` corpus, plus any injected poison docs), takes the top-`knn` most similar paragraphs, picks one at random, and returns its text as the observation — flagging the retrieval as attack-"successful" if the returned text contains the backdoor trigger phrase.
+
+So "search" here is nearest-neighbor lookup over a fixed, locally embedded corpus that may contain attacker-injected poison documents — never a live web query.
